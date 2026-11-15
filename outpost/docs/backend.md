@@ -18,6 +18,7 @@ Set these on the Convex deployment with `npx convex env set NAME value` or in th
 |---|---|---|---|
 | `WORKER_SECRET` | `lib.ts` | Shared secret for the studio worker | Every `studio.*` call fails with "bad worker key" |
 | `MAX_USERS` | `feed.ts` | Most users the deployment accepts | 5 |
+| `DEMO_CONTROLS` | `rewards.ts` | `1` shows the Earnings tab's demo control and allows `rewards.settleDemo` | Off. Never set it on a deployment real users see |
 | `ZERNIO_API_KEY` | `post.ts`, `views.ts`, `admin.ts`, `hood.ts` | Posting and view counts | Real posts fail with "Posting key missing". Views are not read |
 | `WHOP_API_KEY` | `whop.ts`, `hood.ts` | Shop raid setup and payment polling | Setup stops at the first step with "Waiting on the Whop key" |
 | `WHOP_ENV` | `raids.ts` | `production` would use the live Whop API | Sandbox. Setup refuses to run in production |
@@ -169,6 +170,25 @@ One route: `POST /whop/webhook`. It verifies the signature, parses the body, and
 pending and approved earnings per video (per 1K views above the campaign's minimum, capped per clip, or the flat reward),
 Hit/Solid/Miss verdicts against the user's baseline, and the taste score with its tier inputs. `mark({ deviceId, score? })`
 saves the score the Away card showed on Collect, so the next card compares against what the user saw.
+
+### rewards.ts
+
+The accuracy bonus. A right swipe on a bounty video is a bet that it clears two gates. Gate 1: its submission is
+approved on Whop (denied or failed fails it). Gate 2: its live posts reach the campaign's `minViews` and the video isn't
+graded a Miss against the user's baseline; a video still short 48 hours after going live fails it. A video that clears
+both is a right call, one that fails either is a wrong call. The bonus is `1 + 4 * right / (right + wrong + 3)`, so it
+starts at 1x, climbs toward 5x, and every wrong call lowers it.
+
+`summary({ deviceId })` returns the bonus, the right and wrong counts, what the next right or wrong call would make it
+(`ifPass`, `ifFail`), each right-swiped bounty video with both gates and its projected earnings (from its views once
+counted, before that from the studio's forecast score: 60 is the user's usual views, each 15 points doubles or halves
+it, and a user with no baseline yet is taken to do twice the campaign minimum), the totals with and without the bonus,
+the bonus history, and a 30-day projection at 3 and 10 videos a day. The bonus is Outpost's own and pays nothing yet.
+
+`settleDemo({ deviceId, videoId, accepted, views })` is the demo control: Content Rewards has no API for review results
+and they take up to 48 hours, so on stage the builder enters one by hand. It marks the video's posts live with those
+views and its submissions approved or denied, all flagged `demo`, and the app labels them "Demo result". It throws
+unless `DEMO_CONTROLS=1`.
 
 ### you.ts
 

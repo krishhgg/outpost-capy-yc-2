@@ -1,5 +1,5 @@
 // Outpost's shared UI primitives. See outpost/docs/design.md for tokens, props and do/don't examples.
-export { COLOR, DEEP, FONT, INK, LINE, PARCH, POP, SPACE, TYPE, WOOD, money, thousands } from "./tokens";
+export { COLOR, DEEP, FONT, INK, LINE, PARCH, POP, SPACE, TYPE, WOOD, money, mult, thousands } from "./tokens";
 export { feel, type Feel } from "./feel";
 export { Dots, Skeleton } from "./Loader";
 export { Button, type ButtonProps } from "./Button";

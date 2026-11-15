@@ -11,6 +11,7 @@ const TABS: Record<string, { icon: IconName; label: string }> = {
   bounties: { icon: "coin", label: "Bounties" },
   feed: { icon: "play", label: "Feed" },
   index: { icon: "house", label: "Base" },
+  earnings: { icon: "star", label: "Earnings" },
   you: { icon: "person", label: "You" },
 };
 

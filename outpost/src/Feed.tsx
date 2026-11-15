@@ -20,7 +20,7 @@ import { usePayoff } from "./Payoff";
 import { Portrait } from "./Portrait";
 import { Flame, localDay, Milestones, MILESTONES, PLAT } from "./You";
 import { Counter, ICON } from "./Hud";
-import { Badge, Button, Chip, COLOR, DemoNote, EmptyState, feel, HONESTY, useToast } from "./ui";
+import { Badge, Button, Chip, COLOR, DemoNote, EmptyState, feel, HONESTY, mult, useToast } from "./ui";
 
 const { width: W } = Dimensions.get("window");
 type Clip = FunctionReturnType<typeof api.feed.next>[number];
@@ -77,6 +77,9 @@ export function Feed({ device, active, findNow }: { device: string; active: bool
   const payoff = usePayoff();
   // The first approval of the day flips todayDone. Seeing that flip while the Feed is open earns the streak banner.
   const you = useQuery(api.you.summary, { deviceId: device, phoneDay: localDay(now) });
+  // What posting a bounty video puts on the line: the Outpost bonus after a right call and after a wrong one.
+  const rewards = useQuery(api.rewards.summary, { deviceId: device });
+  const stakes = rewards ? { now: rewards.multiplier, pass: rewards.ifPass, fail: rewards.ifFail } : null;
   const doneBefore = useRef<boolean | null>(null);
   const streakAt = useRef(0);
   const lastPost = useRef(false); // whether the latest swipe was a post
@@ -233,7 +236,7 @@ export function Feed({ device, active, findNow }: { device: string; active: bool
                 queued={status?.studio.queued ?? 0} offline={offline}
                 onFind={find && find.id !== findGone ? () => setSinceFind(FIND_EVERY) : undefined} />)
           : box && <Deck clips={clips} done={outcomes.map(x => x.o)} onSwipe={onSwipe} onNote={onNote} active={active && !asking && !showFind}
-              box={box} behind={!showFind} tucked={!!latest && now < trayUntil} />}
+              stakes={stakes} box={box} behind={!showFind} tucked={!!latest && now < trayUntil} />}
         {sent && <Sending key={sent.id} brand={sent.brand} mode={sent.mode} forecast={sent.forecast} onDone={() => setSent(null)} />}
         {showFind && find && (
           <FindCard key={find.id} find={find} onSwipe={dir => {
@@ -452,9 +455,10 @@ function Pill({ live, pop, sig, onPress, testID, label, children }:
 
 // The whole 9:16 video fits inside the deck area, so nothing on it is cropped, including the AI-made label at the
 // bottom. The card sits in a gold frame with the Post and Remake buttons hanging off its bottom edge.
-function Deck({ clips, done, onSwipe, onNote, active, box, behind, tucked }:
+function Deck({ clips, done, onSwipe, onNote, active, stakes, box, behind, tucked }:
   { clips: Clip[]; done: Outcome[]; onSwipe: (c: Clip, dir: 1 | -1, dwellMs: number, edit?: string) => void;
-    onNote: (c: Clip, dwellMs: number) => void; active: boolean; box: Box; behind: boolean; tucked: boolean }) {
+    onNote: (c: Clip, dwellMs: number) => void; active: boolean; stakes: { now: number; pass: number; fail: number } | null;
+    box: Box; behind: boolean; tucked: boolean }) {
   // While the post tray is down, the cards waiting behind slide in behind the top one, so the tray never sits on their edges.
   const tuck = useSharedValue(0);
   useEffect(() => { tuck.value = withTiming(tucked ? 1 : 0, { duration: 180 }); }, [tucked]);
@@ -625,6 +629,10 @@ function Deck({ clips, done, onSwipe, onNote, active, box, behind, tucked }:
                     <Badge label="Pregenerated for the demo" size="sm" dashed testID="pregenerated-label" />
                   ) : null}
                   {top.predicted ? <Forecast key={top.id} score={top.predicted.score} reason={top.predicted.reason} /> : null}
+                  {top.bounty && stakes ? (
+                    <Badge label={`Bonus ${mult(stakes.now)}: right call ${mult(stakes.pass)} · wrong call ${mult(stakes.fail)}`}
+                      tone="ink" size="sm" testID="stakes-label" style={s.tagMax} />
+                  ) : null}
                 </View>
               </View>
             </Block>

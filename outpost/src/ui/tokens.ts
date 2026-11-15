@@ -48,4 +48,6 @@ export const LINE = { panel: 3, tag: 2 } as const;
 // Whole-cent money: 120 -> "$1.20", 300 -> "$3".
 export const money = (cents: number) => `$${(cents / 100).toFixed(cents % 100 ? 2 : 0)}`;
 // 1234 -> "1,234".
+// A bonus multiplier with two decimals, so a small move still shows, and no trailing zero: 1.8x, 1.67x, 2.0x.
+export const mult = (m: number) => `${m.toFixed(2).replace(/(\.\d)0$/, "$1")}x`;
 export const thousands = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
