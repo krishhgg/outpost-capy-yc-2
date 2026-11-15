@@ -13,10 +13,11 @@ import { estimate, gather, grade, median } from "./earnings";
 
 export const MAX_MULTIPLIER = 5;
 export const PRIOR = 3;
-// Gate 2 waits this long before a slow video counts as a Miss. Content Rewards reviews within about 48 hours too.
+// Gate 2 waits this long before a slow video counts as a Miss. Content Rewards reviews within about 48 hours too. Views
+// that arrive later still count: a video that clears the minimum after the window becomes a right call.
 const WINDOW_MS = 48 * 3600 * 1000;
-// Before the user has a baseline of their own, a usual video is taken to do twice the campaign's minimum views (and at
-// least this many), so a fresh account's forecasts aren't all under the minimum and worth nothing.
+// Before the user has a baseline of their own, a usual video is taken to do twice the campaign's minimum views, so a
+// fresh account's forecasts aren't all under the minimum and worth nothing. This is for a campaign with no minimum.
 const DEFAULT_BASELINE = 500;
 // The forecast score (0 to 100) the studio gives each video maps to views: 60 is the user's usual, every 15 points
 // above doubles it and every 15 below halves it.
@@ -78,7 +79,7 @@ async function everything(ctx: QueryCtx, user: Doc<"users">) {
     const g = graded.get(videoId);
     const demo = posts.some(p => p.demo) || subs.some(s => s.demo);
     const forecast = video.predicted?.score ?? FORECAST_MID;
-    const forecastV = forecastViews(forecast, own ?? Math.max(DEFAULT_BASELINE, 2 * (bounty.minViews ?? 0)));
+    const forecastV = forecastViews(forecast, own ?? (bounty.minViews ? 2 * bounty.minViews : DEFAULT_BASELINE));
 
     const one = gate1(posts.length ? sub : null);
     let two: { gate: Gate; label: string; at: number | null } = { gate: "pending", label: "Waiting for views", at: null };
@@ -87,7 +88,8 @@ async function everything(ctx: QueryCtx, user: Doc<"users">) {
       const minOk = item.views >= (bounty.minViews ?? 0);
       const notMiss = g?.verdict !== "miss";
       const final = demo || now - item.liveAt >= WINDOW_MS;
-      if (minOk && notMiss) two = { gate: "pass", label: g?.verdict === "hit" ? "Hit" : "Performing", at: viewsAt };
+      // A pass is dated by when the video went live, not its latest view count, so view refreshes don't reorder history.
+      if (minOk && notMiss) two = { gate: "pass", label: g?.verdict === "hit" ? "Hit" : "Performing", at: item.liveAt };
       else if (final) {
         two = { gate: "fail", label: !minOk ? "Under the minimum views" : "Miss", at: demo ? viewsAt : item.liveAt + WINDOW_MS };
       } else two = { gate: "pending", label: !minOk ? "Under the minimum so far" : "Behind so far", at: null };

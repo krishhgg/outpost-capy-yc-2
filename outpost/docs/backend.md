@@ -175,7 +175,8 @@ saves the score the Away card showed on Collect, so the next card compares again
 
 The accuracy bonus. A right swipe on a bounty video is a bet that it clears two gates. Gate 1: its submission is
 approved on Whop (denied or failed fails it). Gate 2: its live posts reach the campaign's `minViews` and the video isn't
-graded a Miss against the user's baseline; a video still short 48 hours after going live fails it. A video that clears
+graded a Miss against the user's baseline; a video still short 48 hours after going live fails it, until later views
+clear it. A video that clears
 both is a right call, one that fails either is a wrong call. The bonus is `1 + 4 * right / (right + wrong + 3)`, so it
 starts at 1x, climbs toward 5x, and every wrong call lowers it.
 
