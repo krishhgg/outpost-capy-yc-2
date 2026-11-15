@@ -147,9 +147,10 @@ export const summary = query({
     const user = await userFor(ctx, deviceId);
     const { rows, history, passed, failed, multiplier } = await everything(ctx, user);
     const videos = rows.map(r => ({ ...r, boostedCents: Math.round(r.projectedCents * multiplier) })).sort((a, b) => b.swipedAt - a.swipedAt);
-    const open = videos.filter(r => r.outcome !== "fail");
-    const projectedCents = open.reduce((n, r) => n + r.projectedCents, 0);
-    const average = open.length ? projectedCents / open.length : 0;
+    // Every video counts toward what Whop pays: a denied one is already 0, and a Miss that cleared the minimum still
+    // earns even though it lowers the bonus. So the scale-up line carries the user's own hit rate.
+    const projectedCents = videos.reduce((n, r) => n + r.projectedCents, 0);
+    const average = videos.length ? projectedCents / videos.length : 0;
     return {
       multiplier, max: MAX_MULTIPLIER,
       accuracy: passed + failed ? passed / (passed + failed) : null,

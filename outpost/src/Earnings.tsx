@@ -85,7 +85,7 @@ function Bonus({ data }: { data: Summary }) {
 function Totals({ data }: { data: Summary }) {
   return (
     <View style={s.slot}>
-      <Card title="Projected" sub="Videos still in play" testID="earnings-totals">
+      <Card title="Projected" sub="All your bounty videos" testID="earnings-totals">
         <View style={s.split}>
           <View style={s.half}>
             <Text style={s.label}>FROM WHOP</Text>
