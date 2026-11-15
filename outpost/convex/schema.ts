@@ -178,6 +178,8 @@ export default defineSchema({
     liveAt: v.optional(v.number()),
     checks: v.number(),
     error: v.optional(v.string()),
+    // Set by rewards.settleDemo: the outcome was entered with the demo control, not reported by a platform.
+    demo: v.optional(v.boolean()),
   })
     .index("by_user_platform_slot", ["userId", "platform", "slotAt"])
     .index("by_video", ["videoId"])
@@ -299,6 +301,8 @@ export default defineSchema({
     submittedAt: v.optional(v.number()),
     resolvedAt: v.optional(v.number()),
     checks: v.number(),
+    // Set by rewards.settleDemo: the review result was entered with the demo control, not reported by Whop.
+    demo: v.optional(v.boolean()),
   }).index("by_post", ["postId"]).index("by_status", ["status"]).index("by_user", ["userId"]),
 
   // Server-only. No public function may return a token. A seam for real Whop accounts; unused in v1.

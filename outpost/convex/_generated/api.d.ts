@@ -23,6 +23,7 @@ import type * as memory from "../memory.js";
 import type * as pace from "../pace.js";
 import type * as post from "../post.js";
 import type * as raids from "../raids.js";
+import type * as rewards from "../rewards.js";
 import type * as scout from "../scout.js";
 import type * as sources from "../sources.js";
 import type * as studio from "../studio.js";
@@ -55,6 +56,7 @@ declare const fullApi: ApiFromModules<{
   pace: typeof pace;
   post: typeof post;
   raids: typeof raids;
+  rewards: typeof rewards;
   scout: typeof scout;
   sources: typeof sources;
   studio: typeof studio;

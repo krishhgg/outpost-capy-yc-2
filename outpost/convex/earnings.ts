@@ -21,7 +21,7 @@ const NEEDED = 5;
 // Swipes before pickiness gives a provisional score.
 const MIN_SWIPES = 3;
 
-type Item = {
+export type Item = {
   videoId: Id<"videos">;
   bountyId: Id<"bounties"> | null;
   title: string;
@@ -31,7 +31,7 @@ type Item = {
   url: string | null;
 };
 
-const median = (xs: number[]) => {
+export const median = (xs: number[]) => {
   const s = [...xs].sort((a, b) => a - b);
   const m = Math.floor(s.length / 2);
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
@@ -40,7 +40,7 @@ const median = (xs: number[]) => {
 // Each video against the median of the user's earlier counted videos, or the account baseline when a builder set one.
 // A video is scored once the platform has counted it and there is a baseline. The app labels a verdict on a video under
 // two days old "so far", since views still climb.
-function grade(items: Item[], accountBaseline: number | null) {
+export function grade(items: Item[], accountBaseline: number | null) {
   const live = [...items].sort((a, b) => a.liveAt - b.liveAt);
   return live.map((item, i) => {
     const earlier = live.slice(0, i).filter(e => e.counted).map(e => e.views);
@@ -89,7 +89,7 @@ function tasteOf({ items, swipes, submissions, accountBaseline }: Inputs) {
 }
 
 // Content Rewards pays per 1K views above a minimum, up to a cap per clip. A per-submission bounty pays its reward.
-function estimate(b: Doc<"bounties">, views: number) {
+export function estimate(b: Doc<"bounties">, views: number) {
   if (b.rewardKind === "per_submission") return b.rewardCents ?? 0;
   if (!b.ratePer1kCents || views < (b.minViews ?? 0)) return 0;
   const cents = Math.floor((views * b.ratePer1kCents) / 1000);
@@ -98,7 +98,7 @@ function estimate(b: Doc<"bounties">, views: number) {
 
 // The rows everything here reads: live posts grouped into one item per video (platform views summed), the user's
 // submissions and swipes.
-async function gather(ctx: QueryCtx, user: Doc<"users">) {
+export async function gather(ctx: QueryCtx, user: Doc<"users">) {
   const live = await livePosts(ctx, user._id);
   const submissions = await ctx.db.query("submissions").withIndex("by_user", q => q.eq("userId", user._id)).collect();
   const swipes = await ctx.db.query("swipes").withIndex("by_user_day", q => q.eq("userId", user._id)).collect();
