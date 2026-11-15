@@ -20,7 +20,9 @@ const env = Object.fromEntries(
 );
 const CONVEX_URL = process.env.CONVEX_URL ?? env.EXPO_PUBLIC_CONVEX_URL;
 const KEY = process.env.WORKER_SECRET ?? env.WORKER_SECRET;
-const PROJECT_DIR = "/Users/krishgarg/Compound/q177ggecw7099cp4zmehy61dy58fxwt0/projects/outpost-studio";
+// STUDIO_PROJECT_DIR gives a worker for another backend (a local one, say) its own Compound project, since each worker
+// rewrites its project's jobs and template files at start. Compound serves one worker at a time, so run one at a time.
+const PROJECT_DIR = process.env.STUDIO_PROJECT_DIR ?? "/Users/krishgarg/Compound/q177ggecw7099cp4zmehy61dy58fxwt0/projects/outpost-studio";
 const COMPOUND = "/Applications/Compound Beta.app/Contents/Resources/cli/bin/compound";
 const PY = "/tmp/ychack/voice/venv-ko/bin/python";
 // Compound only takes media inside the project, so voice and captions go under its assets/.
