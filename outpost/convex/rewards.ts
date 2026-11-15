@@ -26,6 +26,12 @@ const FORECAST_DOUBLING = 15;
 
 export type Gate = "pass" | "fail" | "pending";
 
+// The demo control is the builder's alone: DEMO_CONTROLS lists the device ids of the builder's phones, comma-separated.
+// Every other device gets neither the control nor the mutation.
+function builderDevice(deviceId: string) {
+  return String(process.env.DEMO_CONTROLS ?? "").split(",").map((s: string) => s.trim()).filter(Boolean).includes(deviceId);
+}
+
 export function multiplierFor(passed: number, failed: number) {
   return Math.round((1 + ((MAX_MULTIPLIER - 1) * passed) / (passed + failed + PRIOR)) * 100) / 100;
 }
@@ -154,18 +160,18 @@ export const summary = query({
       // Thirty days at a steady pace, if each video does as projected, at today's multiplier.
       scale: [3, 10].map(perDay => ({ perDay, monthlyCents: Math.round(average * perDay * 30 * multiplier) })),
       videos, history,
-      demoControls: process.env.DEMO_CONTROLS === "1",
+      demoControls: builderDevice(deviceId),
     };
   },
 });
 
 // The demo control. Content Rewards has no API for review results and they take up to 48 hours, so on stage the
 // builder enters a video's result by hand: accepted or denied, and its views. Everything it writes is flagged `demo`,
-// and the app labels those results "Demo result". Off unless the deployment sets DEMO_CONTROLS=1.
+// and the app labels those results "Demo result". Only for the builder's devices listed in DEMO_CONTROLS.
 export const settleDemo = mutation({
   args: { deviceId: v.string(), videoId: v.id("videos"), accepted: v.boolean(), views: v.number() },
   handler: async (ctx, { deviceId, videoId, accepted, views }) => {
-    if (process.env.DEMO_CONTROLS !== "1") throw new ConvexError("Demo controls are off");
+    if (!builderDevice(deviceId)) throw new ConvexError("Demo controls are off for this device");
     const user = await userFor(ctx, deviceId);
     const video = await ownVideo(ctx, user, videoId);
     if (!video.bountyId) throw new ConvexError("Not a bounty video");

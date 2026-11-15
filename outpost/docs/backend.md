@@ -18,7 +18,7 @@ Set these on the Convex deployment with `npx convex env set NAME value` or in th
 |---|---|---|---|
 | `WORKER_SECRET` | `lib.ts` | Shared secret for the studio worker | Every `studio.*` call fails with "bad worker key" |
 | `MAX_USERS` | `feed.ts` | Most users the deployment accepts | 5 |
-| `DEMO_CONTROLS` | `rewards.ts` | `1` shows the Earnings tab's demo control and allows `rewards.settleDemo` | Off. Never set it on a deployment real users see |
+| `DEMO_CONTROLS` | `rewards.ts` | Comma-separated device ids of the builder's phones. Only those get the Earnings tab's demo control and may call `rewards.settleDemo` | Off for every device |
 | `ZERNIO_API_KEY` | `post.ts`, `views.ts`, `admin.ts`, `hood.ts` | Posting and view counts | Real posts fail with "Posting key missing". Views are not read |
 | `WHOP_API_KEY` | `whop.ts`, `hood.ts` | Shop raid setup and payment polling | Setup stops at the first step with "Waiting on the Whop key" |
 | `WHOP_ENV` | `raids.ts` | `production` would use the live Whop API | Sandbox. Setup refuses to run in production |
@@ -189,7 +189,7 @@ the bonus history, and a 30-day projection at 3 and 10 videos a day. The bonus i
 `settleDemo({ deviceId, videoId, accepted, views })` is the demo control: Content Rewards has no API for review results
 and they take up to 48 hours, so on stage the builder enters one by hand. It marks the video's posts live with those
 views and its submissions approved or denied, all flagged `demo`, and the app labels them "Demo result". It throws
-unless `DEMO_CONTROLS=1`.
+unless the device is listed in `DEMO_CONTROLS`.
 
 ### you.ts
 

@@ -144,7 +144,7 @@ boostedCents, scale: [{ perDay, monthlyCents }], videos: [{ videoId, brand, titl
 projectedCents, boostedCents, gate1, gate2, outcome, demo, ... }], history: [{ brand, reason, outcome, from, to, demo }],
 demoControls }`. Each gate is `{ gate: "pass" | "fail" | "pending", label, at }`.
 
-`settleDemo({ deviceId, videoId, accepted, views })` is a mutation that returns `null`. It needs `DEMO_CONTROLS=1`.
+`settleDemo({ deviceId, videoId, accepted, views })` is a mutation that returns `null`. It throws unless the device is listed in `DEMO_CONTROLS`.
 
 ### `sources.ts` (T15)
 
@@ -198,7 +198,8 @@ Log every outside call to `calls` with its `service` key; the Under the hood scr
 New: `DEMO_CONNECTIONS` (T4, `demo.ts`), a JSON array of `{ platform, accountId, handle }` naming the demo
 Instagram and YouTube accounts in Zernio.
 
-New: `DEMO_CONTROLS` (`rewards.ts`), `1` turns on the Earnings tab's demo control.
+New: `DEMO_CONTROLS` (`rewards.ts`), comma-separated device ids of the builder's phones, the only devices that get the
+Earnings tab's demo control.
 
 Existing: `WORKER_SECRET`, `MAX_USERS`, `ZERNIO_API_KEY`, `WHOP_API_KEY`, `WHOP_ENV`, `WHOP_WEBHOOK_SECRET`,
 `PUBLIC_SITE_URL`, `SUPERMEMORY_API_KEY` (see [backend.md](backend.md)). There is no Whop OAuth, Kakai or
