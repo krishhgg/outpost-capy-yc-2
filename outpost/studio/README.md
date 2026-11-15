@@ -168,7 +168,7 @@ It needs:
 The worker exits on purpose when Compound or the voice server dies or stops answering, so the loop above brings it
 back clean.
 
-### A second worker on its own backend
+### Switching the worker to another backend
 
 Each worker rewrites its Compound project's `jobs.ts` and template files when it starts, so two workers must not share
 a project. To switch to a second backend, such as a local `npx convex dev` one, without disturbing the first worker's project, copy the
