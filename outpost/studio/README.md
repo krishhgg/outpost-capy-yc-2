@@ -171,14 +171,15 @@ back clean.
 ### A second worker on its own backend
 
 Each worker rewrites its Compound project's `jobs.ts` and template files when it starts, so two workers must not share
-a project. To run a second one, such as a worker for a local `npx convex dev` backend next to the cloud one, copy the
+a project. To switch to a second backend, such as a local `npx convex dev` one, without disturbing the first worker's project, copy the
 project folder and point the worker at the copy and at the other backend:
 
 ```sh
 CONVEX_URL=http://127.0.0.1:3210 STUDIO_PROJECT_DIR=<copy of the project folder> node studio/worker.mjs
 ```
 
-Compound still exports one video at a time across all projects, so the two workers take turns rendering.
+Run only one worker at a time. Compound serves one worker: with two connected, the first one's export hangs until
+it times out. Stop the cloud worker before starting the local one, and start it again after.
 
 ### Uploading videos made earlier
 
