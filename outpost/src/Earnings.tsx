@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
+import { useClock } from "./Feed";
 import { Outlined, Sea, WoodHeader } from "./pixel";
 import { Badge, Button, Card, COLOR, DEEP, EmptyState, FONT, HonestyLabel, INK, PARCH, feel, money, mult, thousands } from "./ui";
 
@@ -18,7 +19,8 @@ const x = mult;
 // accepts it on Whop, and it performs. The bonus multiplies what the videos are projected to earn, and it moves with
 // how often those bets come good, so approving everything costs you.
 export function Earnings({ device }: { device: string }) {
-  const data = useQuery(api.rewards.summary, { deviceId: device });
+  const now = useClock(60_000);
+  const data = useQuery(api.rewards.summary, { deviceId: device, minute: Math.floor(now / 60_000) });
   const sub = !data ? "Adding it up…" : `${x(data.multiplier)} Outpost bonus`;
   return (
     <View style={s.fill}>

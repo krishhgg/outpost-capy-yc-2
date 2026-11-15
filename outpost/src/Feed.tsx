@@ -78,7 +78,7 @@ export function Feed({ device, active, findNow }: { device: string; active: bool
   // The first approval of the day flips todayDone. Seeing that flip while the Feed is open earns the streak banner.
   const you = useQuery(api.you.summary, { deviceId: device, phoneDay: localDay(now) });
   // What posting a bounty video puts on the line: the Outpost bonus after a right call and after a wrong one.
-  const rewards = useQuery(api.rewards.summary, { deviceId: device });
+  const rewards = useQuery(api.rewards.summary, { deviceId: device, minute: Math.floor(now / 60_000) });
   const stakes = rewards ? { now: rewards.multiplier, pass: rewards.ifPass, fail: rewards.ifFail } : null;
   const doneBefore = useRef<boolean | null>(null);
   const streakAt = useRef(0);

@@ -61,6 +61,10 @@ async function everything(ctx: QueryCtx, user: Doc<"users">) {
   for (const s of submissions) subsByVideo.set(s.videoId, [...(subsByVideo.get(s.videoId) ?? []), s]);
   const postsByVideo = new Map<Id<"videos">, Doc<"posts">[]>();
   for (const p of live) postsByVideo.set(p.videoId, [...(postsByVideo.get(p.videoId) ?? []), p]);
+  // Whop pays each submitted post on its own views, so minimums and caps apply per post, as on the scoreboard. A post
+  // whose submission was denied or failed earns nothing.
+  const subByPost = new Map(submissions.map(s => [s.postId, s]));
+  const earning = (p: Doc<"posts">) => { const s = subByPost.get(p._id); return !!s && s.status !== "denied" && s.status !== "failed"; };
 
   const bounties = new Map<Id<"bounties">, Doc<"bounties"> | null>();
   const now = Date.now();
@@ -85,7 +89,7 @@ async function everything(ctx: QueryCtx, user: Doc<"users">) {
     let two: { gate: Gate; label: string; at: number | null } = { gate: "pending", label: "Waiting for views", at: null };
     if (item?.counted) {
       const viewsAt = Math.max(...posts.map(p => p.viewsAt ?? p.liveAt ?? p.slotAt));
-      const minOk = item.views >= (bounty.minViews ?? 0);
+      const minOk = posts.some(p => earning(p) && (p.views ?? 0) >= (bounty.minViews ?? 0));
       const notMiss = g?.verdict !== "miss";
       const final = demo || now - item.liveAt >= WINDOW_MS;
       // A pass is dated by when the video went live, not its latest view count, so view refreshes don't reorder history.
@@ -101,7 +105,9 @@ async function everything(ctx: QueryCtx, user: Doc<"users">) {
       : null;
 
     const views = item?.counted ? item.views : forecastV;
-    const projectedCents = one.gate === "fail" ? 0 : estimate(bounty, views);
+    const projectedCents = one.gate === "fail" ? 0
+      : item?.counted ? posts.filter(earning).reduce((n, p) => n + estimate(bounty, p.views ?? 0), 0)
+      : estimate(bounty, forecastV);
     rows.push({
       videoId, bountyId: bounty._id, brand: bounty.brand, title: video.script?.hook ?? video.brief?.hook ?? "",
       swipedAt, forecast, views, viewsSource: item?.counted ? ("actual" as const) : ("forecast" as const),
@@ -128,7 +134,9 @@ async function everything(ctx: QueryCtx, user: Doc<"users">) {
 }
 
 export const summary = query({
-  args: { deviceId: v.string() },
+  // `minute` only makes the query run again as time passes: Convex reruns a query when its data or arguments change,
+  // not when Date.now() moves, and a video that stops gaining views has to fail gate 2 when its window ends.
+  args: { deviceId: v.string(), minute: v.optional(v.number()) },
   handler: async (ctx, { deviceId }) => {
     const user = await userFor(ctx, deviceId);
     const { rows, history, passed, failed, multiplier } = await everything(ctx, user);
