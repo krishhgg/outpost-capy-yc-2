@@ -163,6 +163,13 @@ Whop calls are logged with a summary chosen per call, so the signing secret neve
 
 One route: `POST /whop/webhook`. It verifies the signature, parses the body, and passes `payment.succeeded` events to `raids.recordPayment`. A bad signature gets 401.
 
+### earnings.ts
+
+`summary({ deviceId })` computes everything from live posts, their views, the user's submissions and swipes: estimated
+pending and approved earnings per video (per 1K views above the campaign's minimum, capped per clip, or the flat reward),
+Hit/Solid/Miss verdicts against the user's baseline, and the taste score with its tier inputs. `mark({ deviceId, score? })`
+saves the score the Away card showed on Collect, so the next card compares against what the user saw.
+
 ### you.ts
 
 `summary` (query) feeds the You tab, the Feed's streak line and the widget. It returns the streak, the streak on each of the next few days if nothing more is approved, freezes left, whether today is kept, a 5-week calendar, totals, the top 8 live videos with per-platform views, and the platforms still waiting on a first count. The phone passes its local date as `phoneDay` only so the query reruns at midnight.

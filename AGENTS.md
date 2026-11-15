@@ -28,8 +28,8 @@ planned feature as working.**
 | Whop join + submit post URL | Planned. Nothing built | |
 | Clip engine (cut brand footage into 9:16 clips) | Planned. Today's studio makes original reels | |
 | Director edit chips | Partial: left-swipe reasons ("Hook too slow", "Too long"...) queue a full remake. One-tap param tweak + fast re-render is planned | `convex/feed.ts` (`REASONS`) |
-| Scoreboard | Partial: total and per-video views, streak, You tab. No pending earnings or Whop review status | `convex/you.ts`, `src/You.tsx` |
-| Taste score (approval rate x performance) | Planned. "Taste" today means Supermemory notes from left-swipe reasons | `convex/memory.ts` |
+| Scoreboard | Built: views, estimated pending and approved earnings per video, Whop review status with Submit on Whop, Hit/Solid/Miss verdicts against the user's baseline | `convex/earnings.ts`, `src/You.tsx`, `src/Away.tsx` |
+| Taste score (approval rate x performance) | Built: 0 to 100 with a tier, provisional (from pickiness) until 5 posts are scored. Collect saves the score the Away card showed. Supermemory notes from left-swipe reasons still shape the writer | `convex/earnings.ts`, `convex/memory.ts` |
 | iMessage agent | Planned. Nothing built | |
 | Studio (claude -p script + Kokoro voice + Compound render) | Built: today's video pipeline, Convex job queue to MP4 upload. Starting point for the clip engine | `studio/`, `convex/studio.ts` |
 | Shop raid | Built, Whop sandbox only: creates a $9 Notion template product + checkout, records test payments. Starting point for Whop bounty work | `convex/raids.ts`, `convex/whop.ts` |

@@ -227,13 +227,14 @@ export const summary = query({
   },
 });
 
-// Saves the taste score as it is now, computed here rather than taken from the app. The Away card calls it on Collect,
-// so the next card and the trend compare with the score the user last saw.
+// Saves the taste score the Away card showed when the user tapped Collect, so the next card and the trend compare with
+// the score the user actually saw, even if views or a submission changed while the card was open. Without a shown
+// score it saves the score as it is now.
 export const mark = mutation({
-  args: { deviceId: v.string() },
-  handler: async (ctx, { deviceId }) => {
+  args: { deviceId: v.string(), score: v.optional(v.number()) },
+  handler: async (ctx, { deviceId, score: shown }) => {
     const user = await userFor(ctx, deviceId);
-    const { score } = tasteOf((await gather(ctx, user)).inputs);
+    const score = shown !== undefined ? Math.max(0, Math.min(100, Math.round(shown))) : tasteOf((await gather(ctx, user)).inputs).score;
     if (score !== null) await ctx.db.patch(user._id, { tasteScore: score });
     return null;
   },

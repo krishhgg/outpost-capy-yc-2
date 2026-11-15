@@ -134,6 +134,9 @@ T4 adds one hook in `post.settle`: when a post goes `live` and its video has `bo
 T9 adds the COORDINATOR 2.4 fields (tier, calibrating count, hit rate, approval rate, pickiness, verdicts) as new
 return fields.
 
+`mark({ deviceId, score? })` is a mutation that returns `null`. It saves `users.tasteScore`: the score the Away card
+showed on Collect, or the current score when no score is passed.
+
 ### `sources.ts` (T15)
 
 | Function | Kind | Args | Returns |

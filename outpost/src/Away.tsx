@@ -111,7 +111,7 @@ export function Away() {
     chime.seekTo(0).catch(() => {});
     chime.play();
     collect({ deviceId: device, at: shown.at, views: shown.views.to }).catch(() => {});
-    mark({ deviceId: device }).catch(() => {});
+    if (taste?.scoreTo !== null && taste?.scoreTo !== undefined) mark({ deviceId: device, score: taste.scoreTo }).catch(() => {});
   };
   const finish = () => {
     setShown(null);
