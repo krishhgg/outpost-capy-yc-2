@@ -99,7 +99,8 @@ export const purgeTestUser = internalMutation({
     const posts = [];
     for (const video of videos) {
       posts.push(...await ctx.db.query("posts").withIndex("by_video", q => q.eq("videoId", video._id)).collect());
-      if (video.storageId) await ctx.storage.delete(video.storageId);
+      // A demo library clone shares its library video's file with every other clone, so the library keeps it.
+      if (video.storageId && !video.pregenerated && !video.sourceVideoId) await ctx.storage.delete(video.storageId);
     }
     await drop("posts", posts.map(r => r._id));
     await drop("videos", videos.map(r => r._id));

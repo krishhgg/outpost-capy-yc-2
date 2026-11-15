@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Image, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Animated, { Easing, type SharedValue, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring,
   withTiming } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
@@ -8,6 +8,7 @@ import { Block, FONT, INK, Outlined, PARCH, POP } from "./pixel";
 import type { Who } from "./Agents";
 import { Portrait } from "./Portrait";
 import { Flame, Milestones, MILESTONES } from "./You";
+import { ICON } from "./Hud";
 
 // What a swipe pays back, the way a game answers every tap: a sound, a number that flies up, a line saying what the
 // studio does next, and a banner the first time a day's streak is kept. Every number shown is a real count.
@@ -32,7 +33,13 @@ export function usePayoff() {
   const drop = (id: number) => setShots(list => list.filter(x => x.id !== id));
 
   return {
-    post: () => { play(postSound); add({ kind: "pop", text: "+1 APPROVED" }); },
+    // With a bounty, the toast says where the post is going, and the studio's forecast rides under it, labeled as one.
+    post: (bounty?: { brand: string; forecast?: number | null }) => {
+      play(postSound);
+      add({ kind: "pop", text: "+1 APPROVED" });
+      if (bounty) add({ kind: "toast", text: `Posting + submitting to ${bounty.brand}`, who: "courier",
+        sub: typeof bounty.forecast === "number" ? `Forecast ${bounty.forecast}/100 · a guess, not a result` : undefined });
+    },
     remake: (reason: string) => { play(remakeSound); add({ kind: "toast", text: `Remaking it · ${reason}`, sub: "It comes back in a few cards", who: "director" }); },
     skip: () => add({ kind: "toast", text: "Skipped" }),
     // True while the streak banner shows, for anything that should step aside for it.
@@ -215,7 +222,39 @@ function Streak({ days, onDone, onReach }: { days: number; onDone: () => void; o
   );
 }
 
+// A new taste tier: the whole screen dims, the star bursts gold and the tier's name lands, with the milestone chime and a
+// success haptic. A provisional score's tier says so. Tap or wait to close.
+export function TierUp({ name, provisional, onDone }: { name: string; provisional: boolean; onDone: () => void }) {
+  const star = useAudioPlayer(require("../assets/sounds/star.wav"));
+  const scale = useSharedValue(0.3);
+  useEffect(() => {
+    star.seekTo(0).catch(() => {});
+    star.play();
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    scale.value = withSequence(withTiming(1.15, { duration: 180 }), withSpring(1, POP));
+  }, []);
+  useTimeout(3600, onDone);
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  return (
+    <Modal transparent animationType="fade" visible>
+      <Pressable style={s.tierScrim} onPress={onDone} testID="tier-up">
+        <View style={s.burstMid}>{BITS.map((b, i) => <Bit key={i} {...b} color={GOLDS[i % 3]} dist={b.dist * 1.7} />)}</View>
+        <Animated.View style={[s.streakWrap, style]}>
+          <Block bevel="gold" depth={5} lift={4} style={s.streak}>
+            <Image source={ICON.star} style={s.tierStar} />
+            <Outlined size={30} width={3}>TIER UP</Outlined>
+            <Outlined size={44} width={3} color="#FFF4C4">{name.toUpperCase()}</Outlined>
+            <Text style={s.streakSub}>{provisional ? "Provisional: your score is still calibrating." : "Your taste score reached a new tier."}</Text>
+          </Block>
+        </Animated.View>
+      </Pressable>
+    </Modal>
+  );
+}
+
 const s = StyleSheet.create({
+  tierScrim: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(36,21,43,0.78)" },
+  tierStar: { width: 64, height: 64 },
   pop: { position: "absolute", left: 0, right: 0, top: "38%", alignItems: "center" },
   burst: { position: "absolute", left: "50%", top: 22, width: 0, height: 0 },
   bit: { position: "absolute", borderWidth: 2, borderColor: INK },

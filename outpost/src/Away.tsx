@@ -13,8 +13,13 @@ import { Portrait } from "./Portrait";
 import { ICON, type IconName } from "./Hud";
 import { centerOf, clearPending, getPending, setAwayUp, setPending, targets, type Point } from "./collect";
 import { Block, FONT, INK, Outlined, PARCH, PixelButton, WOOD } from "./pixel";
+import { TierUp } from "./Payoff";
+import { TIERS, tierFor } from "./ui";
+import { FRESH_MS } from "./You";
 
 type Summary = FunctionReturnType<typeof api.away.summary>;
+// The taste side of the card: the score when the user last collected and now, and the best and worst post.
+type Taste = FunctionReturnType<typeof api.earnings.summary>["away"];
 
 const AWAY_MS = 20 * 60_000; // shorter breaks go straight to the app
 const COUNT_MS = 600;
@@ -59,18 +64,23 @@ export function Away() {
   const device = useDevice();
   const convex = useConvex();
   const collect = useMutation(api.away.collect);
+  const mark = useMutation(api.earnings.mark);
   const status = useQuery(api.feed.status, device ? { deviceId: device } : "skip");
   // Lives here rather than in the sheet, so the chime keeps ringing after the sheet closes.
   const chime = useAudioPlayer(require("../assets/sounds/collect.wav"));
   const [shown, setShown] = useState<Summary | null>(null);
+  const [taste, setTaste] = useState<Taste | null>(null);
 
   useEffect(() => {
     if (!device) return;
     let leftAt = 0;
-    const check = (launch: boolean) => convex.query(api.away.summary, { deviceId: device }).then(d => {
+    const check = (launch: boolean) => Promise.all([
+      convex.query(api.away.summary, { deviceId: device }),
+      convex.query(api.earnings.summary, { deviceId: device }).then(e => e.away ?? null).catch(() => null),
+    ]).then(([d, t]) => {
       const news = d.made + d.posted + d.sales.count + (d.views.to - d.views.from);
       // At launch the app can't know when it was last open, so it uses the last Collect instead.
-      if (news > 0 && (!launch || Date.now() - d.since > AWAY_MS)) setShown(d);
+      if (news > 0 && (!launch || Date.now() - d.since > AWAY_MS)) { setTaste(t); setShown(d); }
       else if (launch) setAwayUp(false);
     }).catch(() => { if (launch) setAwayUp(false); });
     check(true);
@@ -93,7 +103,7 @@ export function Away() {
   // The loot flies only when the Base and its counters are on screen.
   const onBase = usePathname() === "/";
 
-  if (!shown || !device) return null;
+  if (!shown || !device) return device ? <TierWatch device={device} /> : null;
   // Videos waiting in the Feed, so the button can take you straight to them.
   const ready = status?.studio.ready ?? 0;
   const collectNow = () => {
@@ -101,20 +111,68 @@ export function Away() {
     chime.seekTo(0).catch(() => {});
     chime.play();
     collect({ deviceId: device, at: shown.at, views: shown.views.to }).catch(() => {});
+    if (taste?.scoreTo !== null && taste?.scoreTo !== undefined) mark({ deviceId: device, score: taste.scoreTo }).catch(() => {});
   };
   const finish = () => {
     setShown(null);
     setAwayUp(false);
     if (ready > 0) router.navigate("/feed");
   };
-  return <Sheet s={shown} ready={ready} onBase={onBase} onCollect={collectNow} onDone={finish} />;
+  return <Sheet s={shown} taste={taste} ready={ready} onBase={onBase} onCollect={collectNow} onDone={finish} />;
+}
+
+// A tier reached while the app is open gets its moment. The first score after launch only sets the mark, so opening
+// the app never celebrates an old tier.
+function TierWatch({ device }: { device: string }) {
+  const taste = useQuery(api.earnings.summary, { deviceId: device })?.taste;
+  const tier = taste?.score === null || taste?.score === undefined ? null : tierFor(taste.score);
+  const rank = tier ? TIERS.indexOf(tier) : null;
+  const last = useRef<number | null>(null);
+  const [up, setUp] = useState<{ name: string; provisional: boolean } | null>(null);
+  useEffect(() => {
+    if (rank === null || !tier) return;
+    if (last.current !== null && rank > last.current) setUp({ name: tier.name, provisional: taste?.state === "calibrating" });
+    last.current = rank;
+  }, [rank]);
+  return up ? <TierUp name={up.name} provisional={up.provisional} onDone={() => setUp(null)} /> : null;
+}
+
+const VERDICT = { hit: "HIT", solid: "SOLID", miss: "MISS" } as const;
+
+// "Taste score 58 → 62", with the change in green or muted red. A first score has nothing to compare with.
+function ScoreLine({ t }: { t: Taste }) {
+  const diff = t.scoreFrom === null || t.scoreTo === null ? 0 : t.scoreTo - t.scoreFrom;
+  return (
+    <View style={st.scoreLine}>
+      <Image source={ICON.star} style={st.star} />
+      <View style={st.lineBody}>
+        <Text style={st.rowLabel}>Taste score</Text>
+        <View style={st.scoreRow}>
+          <Text style={st.scoreValue}>{t.scoreFrom === null || t.scoreFrom === t.scoreTo ? String(t.scoreTo) : `${t.scoreFrom} → ${t.scoreTo}`}</Text>
+          {diff !== 0 && <Text style={[st.delta, { color: diff > 0 ? "#2F8A2C" : "#8A3A32" }]}>{diff > 0 ? `+${diff}` : String(diff)}</Text>}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// The best and worst post: by their verdict against the baseline once graded, by views before that.
+function PostsLine({ t }: { t: Taste }) {
+  const say = (p: NonNullable<Taste["best"]>) => p.verdict && p.ratio !== null
+    ? `${VERDICT[p.verdict]} ${p.ratio.toFixed(1)}x${Date.now() - p.liveAt < FRESH_MS ? " so far" : ""}` : `${p.views.toLocaleString()} views`;
+  return (
+    <View style={st.postsBody}>
+      {t.best && <Text style={st.postLine} numberOfLines={1}><Text style={st.postKey}>Best </Text>{`${say(t.best)} · ${t.best.title}`}</Text>}
+      {t.worst && <Text style={st.postLine} numberOfLines={1}><Text style={st.postKey}>Worst </Text>{`${say(t.worst)} · ${t.worst.title}`}</Text>}
+    </View>
+  );
 }
 
 // A run of icons from a line of the card to a header counter. Each landing gives the counter its share.
 type Leg = { icon: IconName; key: "views" | "cents"; amount: number; from: Point; to: Point; n: number };
 
-function Sheet({ s, ready, onBase, onCollect, onDone }:
-  { s: Summary; ready: number; onBase: boolean; onCollect: () => void; onDone: () => void }) {
+function Sheet({ s, taste, ready, onBase, onCollect, onDone }:
+  { s: Summary; taste: Taste | null; ready: number; onBase: boolean; onCollect: () => void; onDone: () => void }) {
   const tick = useAudioPlayer(require("../assets/sounds/tick.wav"));
   const [skip, setSkip] = useState(false);
   const gained = s.views.to - s.views.from;
@@ -123,7 +181,10 @@ function Sheet({ s, ready, onBase, onCollect, onDone }:
     s.posted > 0 && `${s.posted} posted`,
   ].filter(Boolean).join(" · ");
   // The lines land one at a time with a tick, like loot being counted out. A tap anywhere shows the rest at once.
-  const rows = [work !== "", s.sales.count > 0, gained > 0].filter(Boolean).length;
+  // The score change leads, then the best and worst post, then what the agents did.
+  const scoreRow = !!taste && taste.scoreTo !== null;
+  const postsRow = !!taste?.best;
+  const rows = [scoreRow, postsRow, work !== "", s.sales.count > 0, gained > 0].filter(Boolean).length;
   // Views alone is the whole story, so it gets the card the way loot does in a game: centered and big.
   const hero = rows === 1 && gained > 0;
   const [landed, setLanded] = useState(0);
@@ -193,14 +254,22 @@ function Sheet({ s, ready, onBase, onCollect, onDone }:
               <View style={st.boardEdge} />
             </View>
             <View style={st.body}>
+              {scoreRow && (
+                <Reveal on={lands()} testID="away-score"><ScoreLine t={taste!} /></Reveal>
+              )}
+              {postsRow && (
+                <Line on={lands()} who="courier" style={scoreRow ? st.row : undefined} testID="away-posts">
+                  <PostsLine t={taste!} />
+                </Line>
+              )}
               {work !== "" && (
-                <Line on={lands()} who="director" testID="away-work">
+                <Line on={lands()} who="director" style={scoreRow || postsRow ? st.row : undefined} testID="away-work">
                   <Text style={st.work}>{work}</Text>
                 </Line>
               )}
               {/* A divider separates a line from the one above it, so the first line has none. */}
               {s.sales.count > 0 && (
-                <Line on={lands()} who="merchant" style={work !== "" ? st.row : undefined} testID="away-sales">
+                <Line on={lands()} who="merchant" style={work !== "" || scoreRow || postsRow ? st.row : undefined} testID="away-sales">
                   <Text style={st.rowLabel}>{s.sales.test ? "Test sales" : "Sales"}</Text>
                   <Text style={st.rowValue} ref={salesAt}>+{s.sales.count} · {money(s.sales.netCents)}</Text>
                 </Line>
@@ -211,7 +280,7 @@ function Sheet({ s, ready, onBase, onCollect, onDone }:
                 </Hero>
               )}
               {gained > 0 && !hero && (
-                <Line on={lands()} who="courier" style={work !== "" || s.sales.count > 0 ? st.row : undefined}
+                <Line on={lands()} who="courier" style={work !== "" || s.sales.count > 0 || scoreRow || postsRow ? st.row : undefined}
                   testID="away-views">
                   <View ref={viewsAt} collapsable={false}><Views gained={gained} skip={skip} /></View>
                 </Line>
@@ -261,6 +330,13 @@ function Line({ on, who, style, testID, children }: { on: boolean; who: Who; sty
     : <View style={[st.line, style, { opacity: 0 }]}>{inner}</View>;
 }
 
+// A line without an agent, holding its space until it lands like a Line does.
+function Reveal({ on, testID, children }: { on: boolean; testID: string; children: ReactNode }) {
+  return on
+    ? <Animated.View entering={FadeInDown.duration(220)} testID={testID}>{children}</Animated.View>
+    : <View style={{ opacity: 0 }}>{children}</View>;
+}
+
 // The views line on its own: an eye over the count, centered, holding its space until it lands like a Line does.
 function Hero({ on, children }: { on: boolean; children: ReactNode }) {
   const inner = <><Image source={ICON.eye} style={st.heroEye} />{children}</>;
@@ -306,4 +382,12 @@ const st = StyleSheet.create({
   heroBody: { alignItems: "center" },
   collect: { marginTop: 20 },
   next: { color: PARCH.soft, fontSize: 15, fontFamily: FONT.regular, textAlign: "center", marginTop: 10 },
+  scoreLine: { flexDirection: "row", alignItems: "center", gap: 12 },
+  star: { width: 44, height: 44 },
+  scoreRow: { flexDirection: "row", alignItems: "baseline", gap: 8 },
+  scoreValue: { color: PARCH.ink, fontSize: 30, fontFamily: FONT.bold },
+  delta: { fontSize: 24, fontFamily: FONT.bold },
+  postsBody: { gap: 2 },
+  postLine: { color: PARCH.ink, fontSize: 16, fontFamily: FONT.semi },
+  postKey: { color: PARCH.soft, fontFamily: FONT.bold },
 });

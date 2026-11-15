@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
@@ -22,8 +22,35 @@ export const ICON = {
   play: require("../assets/ui/play.png"),
   glass: require("../assets/ui/glass.png"),
   lock: require("../assets/ui/lock.png"),
+  star: require("../assets/base/star-lit.png"),
 };
 export type IconName = keyof typeof ICON;
+
+// A number that counts to its new value instead of jumping. The first value after loading appears as is, so opening a
+// screen doesn't animate. Undefined is loading.
+export function useTicker(value: number | undefined, ms = 650) {
+  const [shown, setShown] = useState(value);
+  const from = useRef(value);
+  useEffect(() => {
+    if (value === undefined || from.current === undefined || from.current === value) {
+      from.current = value;
+      setShown(value);
+      return;
+    }
+    const start = from.current;
+    from.current = value;
+    const t0 = Date.now();
+    let raf = 0;
+    const step = () => {
+      const k = Math.min(1, (Date.now() - t0) / ms);
+      setShown(Math.round(start + (value - start) * (1 - (1 - k) ** 3)));
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+  return shown;
+}
 
 // A resource counter for the header: an icon riding the left end of a dark bar, the value in outlined type, and an
 // optional tag such as "test" so a test-mode figure never passes for real money. It bumps when its value or icon

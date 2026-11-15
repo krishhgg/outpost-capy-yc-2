@@ -106,7 +106,8 @@ export const requeueVideos = internalMutation({
 });
 
 async function remakeInPlace(ctx: MutationCtx, r: Doc<"videos">) {
-  if (r.storageId) await ctx.storage.delete(r.storageId);
+  // A demo library video's file is shared with its clones, so only a video's own file is deleted.
+  if (r.storageId && !r.pregenerated && !r.sourceVideoId) await ctx.storage.delete(r.storageId);
   await ctx.db.patch(r._id, {
     status: "queued", attempts: 0, script: undefined, storageId: undefined, durationS: undefined, timings: undefined,
     voice: undefined, palette: undefined, model: undefined, readyAt: undefined, stage: undefined, error: undefined,
@@ -151,7 +152,7 @@ export const dropReady = internalMutation({
     if (user?.postingMode !== "dryRun") throw new Error("only for dry-run accounts");
     const rows = await ctx.db.query("videos").withIndex("by_user_status_rank", q => q.eq("userId", userId).eq("status", "ready")).take(100);
     for (const r of rows) {
-      if (r.storageId) await ctx.storage.delete(r.storageId);
+      if (r.storageId && !r.pregenerated && !r.sourceVideoId) await ctx.storage.delete(r.storageId);
       await ctx.db.delete(r._id);
     }
     return rows.length;

@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
-import { Dimensions, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Dimensions, Image, Linking, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from "react-native-reanimated";
 import { router } from "expo-router";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { useClock } from "./Feed";
-import { Counter, ICON, type IconName } from "./Hud";
+import { Counter, ICON, useTicker, type IconName } from "./Hud";
+import { Badge, Button, Card, HonestyLabel, NumberTicker, TierProgress, TIERS, tierFor, VerdictBadge, money, type Tone } from "./ui";
+import type { FunctionReturnType } from "convex/server";
 import { Block, DEEP, FONT, INK, Outlined, PARCH, PixelButton, Plaque, POP, Sea, UNDER_PLAQUE, WoodHeader } from "./pixel";
 
 const { width: W } = Dimensions.get("window");
@@ -41,6 +44,7 @@ export function localDay(t: number) {
 export function You({ device }: { device: string }) {
   const phoneDay = localDay(useClock(60_000));
   const data = useQuery(api.you.summary, { deviceId: device, phoneDay });
+  const earnings = useQuery(api.earnings.summary, { deviceId: device });
   const [month, setMonth] = useState(false);
   const [allPosts, setAllPosts] = useState(false);
   if (!data) return <View style={s.fill} />;
@@ -59,15 +63,25 @@ export function You({ device }: { device: string }) {
   // A platform with posts but not one count yet says so once above the list, and its chips just say "soon".
   const waiting = data.waiting;
   const dryRun = data.mode === "dryRun";
+  // Each live video's verdict against the user's baseline, from the same rows as the list.
+  const verdicts = new Map((earnings?.posts ?? []).map(p => [p.videoId as string, p]));
 
   return (
     <View style={s.fill}>
       <Sea />
       {/* Views stay in view here as on the Base and the Feed. The streak card right below is the streak, so it isn't
           repeated in the header. */}
-      <WoodHeader title="YOU" sub={line}
-        right={<Counter icon="eye" value={compact(totals.views)} testID="you-hud-views" label={`${totals.views} views`} />} />
+      <WoodHeader title="YOU" sub={line} below={
+        <View style={s.hud}>
+          <Counter icon="eye" value={compact(totals.views)} testID="you-hud-views" label={`${totals.views} views`} />
+          <PendingCounter device={device} testID="you-hud-pending" />
+          <ScoreCounter device={device} testID="you-hud-score" />
+        </View>
+      } />
       <ScrollView style={s.flex} contentContainerStyle={{ paddingBottom: 28 }} testID="you">
+        <Taste e={earnings} />
+        <Earnings e={earnings} device={device} />
+
         <Block style={s.card} lift={4} testID="you-streak">
           <View style={s.heroRow}>
             <Flame />
@@ -174,6 +188,7 @@ export function You({ device }: { device: string }) {
               <View style={s.postHead}>
                 {i === 0 && v.views > 0 && <View style={s.topTag} testID="you-post-top"><Text style={s.topText}>TOP</Text></View>}
                 <Text style={s.postTitle} numberOfLines={1}>{v.title}</Text>
+                <Verdict post={verdicts.get(v.id)} />
               </View>
               <View style={s.plats}>
                 {v.platforms.map(p => (
@@ -210,6 +225,185 @@ export function You({ device }: { device: string }) {
         </Block>
 
       </ScrollView>
+    </View>
+  );
+}
+
+type Earn = FunctionReturnType<typeof api.earnings.summary>;
+type Post = Earn["posts"][number];
+
+const pct = (x: number | null | undefined) => (x === null || x === undefined ? "–" : `${Math.round(x * 100)}%`);
+export const ESTIMATE = "Estimated, not guaranteed, pending Whop review.";
+
+// The taste score and estimated pending earnings as header counters, for any screen's resource bar. Both count to a new
+// value and bump. The pending figure is an estimate, so it always wears "est"; a provisional score wears "prov" instead
+// of its tier. They live here rather than in Hud.tsx because src/ui imports Hud.
+export function ScoreCounter({ device, onPress, testID = "hud-score" }: { device: string; onPress?: () => void; testID?: string }) {
+  const t = useQuery(api.earnings.summary, { deviceId: device })?.taste;
+  const n = useTicker(t?.score ?? undefined);
+  const tier = t?.score === null || t?.score === undefined ? null : tierFor(t.score);
+  return <Counter icon="star" value={!t ? "…" : n === undefined ? "–" : String(n)} testID={testID} onPress={onPress}
+    tag={!tier ? undefined : t?.state === "calibrating" ? "prov" : tier.name}
+    label={!t ? "Taste score loading" : !tier ? "No taste score yet"
+      : `Taste score ${t.score}, ${tier.name}${t.state === "calibrating" ? ", provisional" : ""}`} />;
+}
+
+export function PendingCounter({ device, onPress, testID = "hud-pending" }: { device: string; onPress?: () => void; testID?: string }) {
+  const e = useQuery(api.earnings.summary, { deviceId: device });
+  const n = useTicker(e?.pendingCents);
+  return <Counter icon="coin" value={n === undefined ? "…" : money(n)} tag="est" testID={testID} onPress={onPress}
+    label={e ? `${money(e.pendingCents)} estimated pending. ${ESTIMATE}` : "Pending earnings loading"} />;
+}
+
+// Under two days old a post's views are still climbing, so its verdict is "so far".
+export const FRESH_MS = 2 * 86_400_000;
+
+// Hit, Solid or Miss against the user's baseline.
+export function Verdict({ post }: { post: Pick<Post, "verdict" | "ratio" | "liveAt"> | undefined | null }) {
+  if (!post?.verdict || post.ratio === null) return null;
+  return <VerdictBadge verdict={post.verdict} ratio={post.ratio} size="sm" reason={Date.now() - post.liveAt < FRESH_MS ? "so far" : undefined} />;
+}
+
+// The taste score, its tier and the way to the next one, then the three percentages it comes from. Until five posts
+// are scored against the baseline the score is provisional and says so, with the count.
+function Taste({ e }: { e: Earn | undefined }) {
+  const t = e?.taste;
+  if (!t || !e) return <Card loading testID="you-taste" style={s.cardGap} />;
+  const pick = t.pickiness;
+  const extreme = pick !== null && t.seenClips >= 5 && (pick >= 0.9 || pick <= 0.1);
+  const pickNote = pick === null ? "Swipe a few clips to see it."
+    : extreme && pick >= 0.9 ? "You approve almost everything. Skip the weak ones; that's what scores you."
+    : extreme ? "You're turning almost everything down. Approve the ones you'd watch."
+    : pick >= 0.2 && pick <= 0.5 ? "Healthy: 20-50% is the sweet spot."
+    : pick > 0.5 ? "A bit generous. 20-50% is the sweet spot." : "Very picky. 20-50% is the sweet spot.";
+  return (
+    <Card style={s.cardGap} testID="you-taste">
+      <Text style={s.tasteLabel}>TASTE SCORE</Text>
+      {t.score === null ? (
+        <Text style={s.tasteNote} testID="you-taste-empty">
+          No score yet. Swipe 3 clips for a provisional score from your pickiness; it turns real as your posts get views.
+        </Text>
+      ) : (
+        <TierProgress score={t.score} testID="you-tier"
+          calibrating={t.state === "calibrating" ? { scored: t.scored, needed: t.needed } : undefined} />
+      )}
+      {e.tasteTrend !== 0 && (
+        <Text style={[s.trend, { color: e.tasteTrend > 0 ? "#2F8A2C" : "#8A3A32" }]} testID="you-trend">
+          {`${e.tasteTrend > 0 ? "▲ +" : "▼ "}${e.tasteTrend} since you last collected`}
+        </Text>
+      )}
+      {t.state === "calibrating" && (
+        <Text style={s.tasteNote}>
+          {t.scored === 0 ? "From your pickiness for now. Each post with views, compared with your earlier posts, makes it real."
+            : "Your pickiness, blended with the posts scored so far."}
+        </Text>
+      )}
+      <View style={s.stats}>
+        <Stat label="Hit rate" value={pct(t.hitRate)} testID="you-hit-rate"
+          sub={t.scored ? `${t.hits} of ${t.scored} beat your baseline 1.5x` : "No posts scored yet"} />
+        <Stat label="Approval" value={pct(t.approvalRate)} testID="you-approval-rate"
+          sub={t.settledSubmissions ? `Whop approved ${t.approvedSubmissions} of ${t.settledSubmissions}` : "Waiting on Whop"} />
+        <Stat label="Pickiness" value={pct(pick)} testID="you-pickiness"
+          sub={pick === null ? "No swipes yet" : `Approved ${t.approvedClips} of ${t.seenClips} clips`} />
+      </View>
+      <Text style={[s.tasteNote, extreme && s.warn]} testID="you-pickiness-note">{pickNote}</Text>
+      <Text style={s.fine}>
+        {`Score = approval rate × views vs your baseline (the median of your earlier posts${t.baselineFrom === "account" ? ", set for this account" : ""}). Hit is 1.5x or more, Miss under 0.8x. Tiers: ${TIERS.map(x => x.name).join(", ")}.`}
+      </Text>
+    </Card>
+  );
+}
+
+function Stat({ label, value, sub, testID }: { label: string; value: string; sub: string; testID: string }) {
+  return (
+    <View style={s.stat} testID={testID}>
+      <Text style={s.statValue}>{value}</Text>
+      <Text style={s.statLabel}>{label}</Text>
+      <Text style={s.statSub}>{sub}</Text>
+    </View>
+  );
+}
+
+const STATUS: Record<string, { text: string; tone: Tone }> = {
+  manual: { text: "NOT ON WHOP YET", tone: "orange" },
+  pending: { text: "SUBMITTING", tone: "gold" },
+  submitted: { text: "SUBMITTED", tone: "slate" },
+  approved: { text: "APPROVED", tone: "green" },
+  denied: { text: "DENIED", tone: "red" },
+  failed: { text: "FAILED", tone: "red" },
+};
+
+// Estimated pending and approved money from bounty posts, each with its views, estimate and Whop status.
+function Earnings({ e, device }: { e: Earn | undefined; device: string }) {
+  const rows = e?.perVideo ?? [];
+  return (
+    <Card title="Earnings" style={s.cardGap} loading={!e} testID="you-earnings">
+      <View style={s.moneyRow}>
+        <View>
+          <NumberTicker value={e?.pendingCents} format={money} size={40} outlined={false} color="#2F8A2C" testID="you-pending" />
+          <Text style={s.moneyLabel}>pending</Text>
+        </View>
+        <View style={s.moneyRight}>
+          <NumberTicker value={e?.approvedCents} format={money} size={26} outlined={false} delta={false} testID="you-approved" />
+          <Text style={s.moneyLabel}>approved</Text>
+        </View>
+      </View>
+      <View style={s.honesty}><HonestyLabel kind="estimated" detail testID="you-earnings-label" /></View>
+      {!!e?.unsubmittedCents && (
+        <Text style={s.tasteNote} testID="you-earnings-unsubmitted">{`+${money(e.unsubmittedCents)} more (est.) once you submit your posts on Whop.`}</Text>
+      )}
+      {rows.length === 0 ? (
+        <Text style={s.emptyText}>No bounty posts live yet. Take a bounty, approve a clip, and its views earn here.</Text>
+      ) : rows.map(r => <EarnRow key={r.videoId} r={r} device={device} />)}
+    </Card>
+  );
+}
+
+// One bounty video: brand, verdict, estimate, views and where its submission stands. A manual submission carries the
+// "Submit on Whop" flow: the post URL to paste there, the campaign page, then "I submitted it". A video posted to both
+// platforms has a row per post, so the flow repeats until none is left. A submission the user reported themselves is a
+// label, not a Whop-confirmed status.
+function EarnRow({ r, device }: { r: Earn["perVideo"][number]; device: string }) {
+  const sub = useQuery(api.submit.forVideo, { deviceId: device, videoId: r.videoId });
+  const mark = useMutation(api.submit.markSubmitted);
+  const [busy, setBusy] = useState(false);
+  const status = sub?.status ?? r.status;
+  const st = status ? STATUS[status] : null;
+  return (
+    <View style={s.earnRow} testID="you-earning">
+      <View style={s.earnHead}>
+        <Text style={s.brand} numberOfLines={1}>{r.brand || "Bounty"}</Text>
+        <Verdict post={r} />
+        <Text style={s.earnCents}>{money(r.estCents)}</Text>
+      </View>
+      <Pressable style={({ pressed }) => [s.earnHead, pressed && { opacity: 0.7 }]} disabled={!r.url}
+        onPress={() => r.url && Linking.openURL(r.url)} accessibilityRole={r.url ? "link" : undefined}>
+        <Text style={s.earnTitle} numberOfLines={1}>{r.title}</Text>
+        <Image source={ICON.eye} style={s.postEye} />
+        <Text style={s.earnViews}>{compact(r.views)}</Text>
+        {status === "submitted" && sub?.selfReported ? <Text style={s.selfReported} testID="you-earning-self">Submitted by you</Text>
+          : <Badge label={st?.text ?? "NOT SUBMITTED"} tone={st?.tone ?? "parch"} size="sm" />}
+      </Pressable>
+      {status === "denied" && sub?.denialReason ? <Text style={s.denied}>{`Denied: ${sub.denialReason}`}</Text> : null}
+      {sub?.status === "manual" && (
+        <View style={s.submitBox} testID="you-submit">
+          <Text style={s.submitLead}>{`Paste this post's link on ${sub.brand}'s campaign:`}</Text>
+          <View style={s.urlRow}>
+            <Text style={s.url} numberOfLines={1} selectable testID="you-submit-url">{sub.postUrl}</Text>
+            <Pressable onPress={() => Share.share({ url: sub.postUrl, message: sub.postUrl }).catch(() => {})} hitSlop={6}
+              accessibilityRole="button" accessibilityLabel="Copy or share the post link" testID="you-submit-copy">
+              <Text style={s.copy}>Copy link</Text>
+            </Pressable>
+          </View>
+          <View style={s.submitButtons}>
+            <Button label="Submit on Whop" size="sm" bevel="green" style={s.flex}
+              onPress={() => WebBrowser.openBrowserAsync(sub.deepLink).catch(() => {})} testID="you-submit-whop" />
+            <Button label="I submitted it" size="sm" variant="secondary" style={s.flex} loading={busy} loadingLabel="Saving"
+              onPress={() => { setBusy(true); mark({ deviceId: device, videoId: r.videoId }).finally(() => setBusy(false)); }}
+              testID="you-submit-done" />
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -298,6 +492,36 @@ function Tile({ icon, label, value }: { icon: IconName; label: string; value: st
 
 const s = StyleSheet.create({
   fill: { flex: 1, backgroundColor: DEEP },
+  hud: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
+  cardGap: { marginHorizontal: 12, marginTop: 14 },
+  tasteLabel: { color: PARCH.soft, fontSize: 16, fontFamily: FONT.bold, marginBottom: 6 },
+  trend: { fontSize: 17, fontFamily: FONT.bold, marginTop: 8 },
+  tasteNote: { color: PARCH.soft, fontSize: 15, fontFamily: FONT.semi, marginTop: 8 },
+  warn: { color: "#B04A10" },
+  stats: { flexDirection: "row", gap: 8, marginTop: 12 },
+  stat: { flex: 1, backgroundColor: PARCH.top, borderWidth: 2, borderColor: PARCH.bottom, paddingHorizontal: 6, paddingVertical: 6, alignItems: "center" },
+  statValue: { color: PARCH.ink, fontSize: 28, fontFamily: FONT.bold },
+  statLabel: { color: PARCH.ink, fontSize: 15, fontFamily: FONT.bold, marginTop: -4 },
+  statSub: { color: PARCH.soft, fontSize: 12, fontFamily: FONT.semi, textAlign: "center", marginTop: 2 },
+  fine: { color: PARCH.soft, fontSize: 13, fontFamily: FONT.semi, marginTop: 10, lineHeight: 16 },
+  moneyRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" },
+  moneyRight: { alignItems: "flex-end" },
+  moneyLabel: { color: PARCH.soft, fontSize: 15, fontFamily: FONT.semi, marginTop: -4 },
+  honesty: { marginTop: 8, marginBottom: 6 },
+  earnRow: { paddingVertical: 8, gap: 4, borderTopWidth: 2, borderTopColor: PARCH.bottom },
+  earnHead: { flexDirection: "row", alignItems: "center", gap: 6 },
+  brand: { color: PARCH.ink, fontSize: 18, fontFamily: FONT.bold, flexShrink: 1 },
+  earnCents: { marginLeft: "auto", color: "#2F8A2C", fontSize: 18, fontFamily: FONT.bold },
+  earnTitle: { color: PARCH.soft, fontSize: 15, fontFamily: FONT.semi, flex: 1 },
+  earnViews: { color: PARCH.ink, fontSize: 15, fontFamily: FONT.bold },
+  selfReported: { color: PARCH.soft, fontSize: 14, fontFamily: FONT.semi, fontStyle: "italic" },
+  denied: { color: "#8A3A32", fontSize: 15, fontFamily: FONT.semi },
+  submitBox: { marginTop: 6, gap: 8, backgroundColor: PARCH.top, borderWidth: 2, borderColor: PARCH.bottom, padding: 8 },
+  submitLead: { color: PARCH.ink, fontSize: 15, fontFamily: FONT.semi },
+  urlRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  url: { flex: 1, color: PARCH.soft, fontSize: 14, fontFamily: FONT.semi },
+  copy: { color: "#B04A10", fontSize: 16, fontFamily: FONT.bold },
+  submitButtons: { flexDirection: "row", gap: 8 },
   flex: { flex: 1 },
   card: { marginHorizontal: 12, marginTop: 14, padding: 14, paddingBottom: 18 },
   heroRow: { flexDirection: "row", alignItems: "center", gap: 10 },
