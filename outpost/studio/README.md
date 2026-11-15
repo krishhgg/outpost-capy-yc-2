@@ -168,6 +168,18 @@ It needs:
 The worker exits on purpose when Compound or the voice server dies or stops answering, so the loop above brings it
 back clean.
 
+### A second worker on its own backend
+
+Each worker rewrites its Compound project's `jobs.ts` and template files when it starts, so two workers must not share
+a project. To run a second one, such as a worker for a local `npx convex dev` backend next to the cloud one, copy the
+project folder and point the worker at the copy and at the other backend:
+
+```sh
+CONVEX_URL=http://127.0.0.1:3210 STUDIO_PROJECT_DIR=<copy of the project folder> node studio/worker.mjs
+```
+
+Compound still exports one video at a time across all projects, so the two workers take turns rendering.
+
 ### Uploading videos made earlier
 
 If videos for queued briefs were already made somewhere else (for example while Convex was unreachable), point
